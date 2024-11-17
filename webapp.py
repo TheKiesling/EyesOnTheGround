@@ -33,7 +33,7 @@ uploaded_file = st.file_uploader("Sube una imagen de la planta", type=["jpg", "j
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file).convert('RGB')
-    st.image(image, caption='Imagen subida', use_column_width=True)
+    st.image(image, caption='Imagen subida', use_container_width=True)
 
     st.write('Por favor, ingresa la siguiente información:')
     
