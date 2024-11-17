@@ -1,15 +1,15 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import tensorflow as tf
 from PIL import Image
 import pickle
+from joblib import load
 
 # Cargar el modelo híbrido
-vit_model = tf.keras.models.load_model('models/vit_model.h5')
+vit_model = load('models/vitModel2.pkl')
 
 # Cargar el ColumnTransformer
-with open('models/columntransformerVIT.pkl', 'rb') as file:
+with open('models/column_transformerVIT.pkl', 'rb') as file:
     column_transformer = pickle.load(file)
 
 IMAGE_SIZE = 224
