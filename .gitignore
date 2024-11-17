@@ -1,4 +1,8 @@
 data/
 CNN_RandomForest/
 resized_images.npy
+env3.9/
+/test
+/train
+
 66CNN_RandomForest/
