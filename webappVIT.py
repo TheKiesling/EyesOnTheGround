@@ -9,15 +9,15 @@ from joblib import load
 vit_model = load('models/vitModel2.pkl')
 column_transformer_vit = load("models/column_transformerVIT.pkl")
 
-rf_model = load("CNN_RF_with_augmentation_model/random_forest_aug_model.pkl")  # Modelo Random Forest
-vgg16_model = tf.keras.models.load_model("CNN_RF_with_augmentation_model/model_vgg16.keras")  # Modelo VGG16
-column_transformer_rf = load("CNN_RF_with_augmentation_model/column_transformer.pkl")
+rf_model = load("models/random_forest_aug_model.pkl")  # Modelo Random Forest
+vgg16_model = tf.keras.models.load_model("models/model_vgg16.keras")  # Modelo VGG16
+column_transformer_rf = load("models/column_transformer.pkl")
 
 IMAGE_SIZE = 224
 
 # Función para procesar la imagen
-def process_image(image):
-    img = image.resize((IMAGE_SIZE, IMAGE_SIZE))
+def process_image(image, size):
+    img = image.resize((size, size))
     img = np.array(img) / 255.0  # Normalización
     img = np.expand_dims(img, axis=0)
     return img
@@ -66,7 +66,7 @@ if uploaded_file is not None:
         encoded_features_vit = encoded_features_dataset.to_numpy()
 
         # Preprocesar la imagen
-        image_tensor = process_image(image)
+        image_tensor = process_image(image, 224)
 
         # Predicción usando el modelo híbrido
         predictions = vit_model.predict({
@@ -86,7 +86,7 @@ if uploaded_file is not None:
         encoded_features_rf = encoded_features_rf_dataset.to_numpy()
 
         # Preprocesar la imagen y extraer características usando el modelo VGG16
-        image_tensor = process_image(image)
+        image_tensor = process_image(image,128)
         features = vgg16_model.predict(image_tensor)
         features_flat = features.reshape(1, -1)
 
