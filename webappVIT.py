@@ -1,16 +1,14 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import tensorflow as tf
 from PIL import Image
 import pickle
 from joblib import load
 
 # Cargar el modelo híbrido
 vit_model = load('models/vitModel2.pkl')
-
-# Cargar el ColumnTransformer
-with open('models/column_transformerVIT.pkl', 'rb') as file:
-    column_transformer = pickle.load(file)
+column_transformer = load("models/column_transformerVIT.pkl")
 
 IMAGE_SIZE = 224
 
@@ -38,19 +36,25 @@ if uploaded_file is not None:
     selected_growth_stage = st.selectbox('Etapa de crecimiento', growth_stage)
     selected_damage = st.selectbox('Daño', damage)
     selected_season = st.selectbox('Temporada', season)
-    
-    extent = st.number_input('Nivel estimado de extensión de la enfermedad (opcional)', min_value=0.0, max_value=1.0, step=0.01)
 
     # Crear DataFrame para características tabulares
     input_features = pd.DataFrame({
         'growth_stage': [selected_growth_stage],
         'damage': [selected_damage],
         'season': [selected_season],
-        'extent': [extent]
+        'ID': [None],
+        'extent': [None],
+        'filename': [None]
     })
-
+    
+    
     # Aplicar el ColumnTransformer para codificación
     encoded_features = column_transformer.transform(input_features)
+    
+    # Eliminar columnas innecesarias
+    encoded_features_dataset = pd.DataFrame(encoded_features, columns=column_transformer.get_feature_names_out())
+    encoded_features_dataset = encoded_features_dataset.drop(columns=['remainder__ID', 'remainder__filename', 'remainder__extent'])
+    encoded_features = encoded_features_dataset.to_numpy()
 
     # Preprocesar la imagen
     image_tensor = process_image(image)
