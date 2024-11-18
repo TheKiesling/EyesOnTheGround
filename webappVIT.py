@@ -3,12 +3,15 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 from PIL import Image
-import pickle
 from joblib import load
 
 # Cargar el modelo híbrido
 vit_model = load('models/vitModel2.pkl')
-column_transformer = load("models/column_transformerVIT.pkl")
+column_transformer_vit = load("models/column_transformerVIT.pkl")
+
+rf_model = load("CNN_RF_with_augmentation_model/random_forest_aug_model.pkl")  # Modelo Random Forest
+vgg16_model = tf.keras.models.load_model("CNN_RF_with_augmentation_model/model_vgg16.keras")  # Modelo VGG16
+column_transformer_rf = load("CNN_RF_with_augmentation_model/column_transformer.pkl")
 
 IMAGE_SIZE = 224
 
@@ -47,24 +50,52 @@ if uploaded_file is not None:
         'filename': [None]
     })
     
-    
-    # Aplicar el ColumnTransformer para codificación
-    encoded_features = column_transformer.transform(input_features)
-    
-    # Eliminar columnas innecesarias
-    encoded_features_dataset = pd.DataFrame(encoded_features, columns=column_transformer.get_feature_names_out())
-    encoded_features_dataset = encoded_features_dataset.drop(columns=['remainder__ID', 'remainder__filename', 'remainder__extent'])
-    encoded_features = encoded_features_dataset.to_numpy()
+    # Selección del modelo a utilizar
+    model_choice = st.radio(
+        "Selecciona el enfoque a utilizar:",
+        ('Vision Transformers (ViT) + Regresión Densa', 'CNN + Random Forest')
+    )
 
-    # Preprocesar la imagen
-    image_tensor = process_image(image)
+    if model_choice == 'Vision Transformers (ViT) + Regresión Densa':
+        # Aplicar el ColumnTransformer para el modelo híbrido
+        encoded_features_vit = column_transformer_vit.transform(input_features)
 
-    # Predicción usando el modelo híbrido
-    predictions = vit_model.predict({
-        'image_input': image_tensor,
-        'tabular_input': encoded_features.astype(np.float32)
-    })
+        # Eliminar columnas innecesarias si es necesario
+        encoded_features_dataset = pd.DataFrame(encoded_features_vit, columns=column_transformer_vit.get_feature_names_out())
+        encoded_features_dataset = encoded_features_dataset.drop(columns=['remainder__ID', 'remainder__filename', 'remainder__extent'], errors='ignore')
+        encoded_features_vit = encoded_features_dataset.to_numpy()
 
-    st.write(f"Predicción del nivel de extensión de la enfermedad (usando Vision Transformers): {predictions[0][0]:.2f}")
+        # Preprocesar la imagen
+        image_tensor = process_image(image)
+
+        # Predicción usando el modelo híbrido
+        predictions = vit_model.predict({
+            'image_input': image_tensor,
+            'tabular_input': encoded_features_vit.astype(np.float32)
+        })
+
+        st.write(f"Predicción del nivel de extensión de la enfermedad (usando Vision Transformers): {predictions[0][0]:.2f}")
+
+    elif model_choice == 'CNN + Random Forest':
+        # Aplicar el ColumnTransformer para el modelo Random Forest
+        encoded_features_rf = column_transformer_rf.transform(input_features)
+
+        # Eliminar columnas innecesarias si es necesario
+        encoded_features_rf_dataset = pd.DataFrame(encoded_features_rf, columns=column_transformer_rf.get_feature_names_out())
+        encoded_features_rf_dataset = encoded_features_rf_dataset.drop(columns=['remainder__ID', 'remainder__filename', 'remainder__extent'], errors='ignore')
+        encoded_features_rf = encoded_features_rf_dataset.to_numpy()
+
+        # Preprocesar la imagen y extraer características usando el modelo VGG16
+        image_tensor = process_image(image)
+        features = vgg16_model.predict(image_tensor)
+        features_flat = features.reshape(1, -1)
+
+        # Combinar características
+        combined_features_rf = np.hstack((features_flat, encoded_features_rf))
+
+        # Predicción usando Random Forest
+        predictions_rf = rf_model.predict(combined_features_rf)
+        st.write(f"Predicción del nivel de extensión de la enfermedad (usando CNN + Random Forest): {predictions_rf[0]:.2f}")
+
 else:
     st.write('Por favor, sube una imagen para continuar.')
