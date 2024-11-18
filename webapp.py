@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import torchvision.transforms as transforms
 import pickle
+import matplotlib.pyplot as plt
 
 with open('models/xgb_classifier.pkl', 'rb') as file:
     xgb_classifier = pickle.load(file)
@@ -86,5 +87,42 @@ if uploaded_file is not None:
     if is_diseased:
         disease_extent = rf_regressor.predict([combined_features])[0]
         st.write(f"Predicción del nivel de extensión de la enfermedad: {disease_extent:.2f}")
+        
+    importances = rf_regressor.feature_importances_
+        
+    num_importances = len(importances)
+    features = np.hstack((np.arange(image_features.size), one_hot_encoder.get_feature_names_out()))
+
+    if len(features) > num_importances:
+        features = features[:num_importances]
+    elif len(features) < num_importances:
+        importances = importances[:len(features)]
+
+    importance_df = pd.DataFrame({'Feature': features, 'Importance': importances})
+
+    importance_df['Feature'] = importance_df['Feature'].apply(lambda x: 'imagen' if str(x).isdigit() else x)
+
+    grouped_importances = (
+        importance_df.groupby('Feature')['Importance'].sum()
+        .sort_values(ascending=False)
+        .reset_index()
+    )
+
+    N = 10
+    top_features = grouped_importances.iloc[:N]
+
+    # Graficar la importancia de cada categoría
+    plt.figure(figsize=(10, 6))
+    plt.barh(top_features['Feature'], top_features['Importance'], color='#4e6b4d')
+    plt.xlabel('Importancia')
+    plt.ylabel('Categorías')
+    plt.title(f'Importancia de las Top {N} categorías en el Random Forest')
+    plt.gca().spines['top'].set_visible(False)
+    plt.gca().spines['right'].set_visible(False)
+    plt.gca().invert_yaxis()
+
+    # Mostrar el gráfico en Streamlit
+    st.pyplot(plt)
+    
 else:
     st.write('Por favor, sube una imagen para continuar.')
