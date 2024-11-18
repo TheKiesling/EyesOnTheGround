@@ -4,6 +4,8 @@ import numpy as np
 import tensorflow as tf
 from PIL import Image
 from joblib import load
+import matplotlib.pyplot as plt
+
 
 # Cargar el modelo híbrido
 vit_model = load('models/vitModel2.pkl')
@@ -28,7 +30,7 @@ uploaded_file = st.file_uploader("Sube una imagen de la planta", type=["jpg", "j
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file).convert('RGB')
-    st.image(image, caption='Imagen subida', use_column_width=True)
+    st.image(image, caption='Imagen subida', use_container_width=True)
 
     st.write('Por favor, ingresa la siguiente información:')
     
@@ -96,6 +98,41 @@ if uploaded_file is not None:
         # Predicción usando Random Forest
         predictions_rf = rf_model.predict(combined_features_rf)
         st.write(f"Predicción del nivel de extensión de la enfermedad (usando CNN + Random Forest): {predictions_rf[0]:.2f}")
+        
+        # Obtener la importancia de cada característica
+        importances = rf_model.feature_importances_
+        features = np.hstack((encoded_features_rf_dataset.columns, ['imagen'] * features_flat.shape[1]))
+
+        # Crear un DataFrame con la importancia
+        importance_df = pd.DataFrame({'Feature': features, 'Importance': importances})
+        importance_df = importance_df.sort_values(by='Importance', ascending=False)
+
+        # Agrupar las características con nombres numéricos bajo la categoría "imagen"
+        importance_df['Feature'] = importance_df['Feature'].apply(lambda x: 'imagen' if x.isdigit() else x)
+
+        # Sumar las importancias de todas las columnas categorizadas como "imagen"
+        grouped_importances = (
+            importance_df.groupby('Feature')['Importance'].sum()
+            .sort_values(ascending=False)
+            .reset_index()
+        )
+
+        # Limitar a las N categorías más importantes
+        N = 10  # Ajustar según sea necesario
+        top_features = grouped_importances.iloc[:N]
+
+        # Graficar la importancia de cada categoría
+        plt.figure(figsize=(10, 6))
+        plt.barh(top_features['Feature'], top_features['Importance'], color='#4e6b4d')
+        plt.xlabel('Importancia')
+        plt.ylabel('Categorías')
+        plt.title(f'Importancia de las Top {N} categorías en el Random Forest')
+        plt.gca().spines['top'].set_visible(False)
+        plt.gca().spines['right'].set_visible(False)
+        plt.gca().invert_yaxis()
+
+        # Mostrar el gráfico en Streamlit
+        st.pyplot(plt)
 
 else:
     st.write('Por favor, sube una imagen para continuar.')
