@@ -7,6 +7,7 @@ from joblib import load
 import matplotlib.pyplot as plt
 
 
+
 # Cargar el modelo híbrido
 vit_model = load('models/vitModel2.pkl')
 column_transformer_vit = load("models/column_transformerVIT.pkl")
@@ -23,6 +24,81 @@ def process_image(image, size):
     img = np.array(img) / 255.0  # Normalización
     img = np.expand_dims(img, axis=0)
     return img
+
+def get_attention_map(model, image):
+    
+    # Preprocesar la imagen
+    image = tf.image.resize(image, (224, 224))
+    image = tf.expand_dims(image, axis=0)
+    image = image / 255.0
+
+    # Preprocesar las características tabulares
+    feature_columns = ['growth_stage_F', 'growth_stage_M', 'growth_stage_S', 'growth_stage_V',
+        'damage_DR', 'damage_DS', 'damage_FD', 'damage_G', 'damage_ND',
+        'damage_PS', 'damage_WD', 'damage_WN', 'season_LR2020', 'season_LR2021',
+        'season_SR2020', 'season_SR2021']
+    
+    dummy_tabular_input = np.zeros((1, len(feature_columns)), dtype=np.float32)
+
+    # Crear el diccionario de entradas
+    inputs = {
+        'image_input': image,
+        'tabular_input': dummy_tabular_input
+    }
+
+    # Encontrar las capas MultiHeadAttention
+    attention_layers = [layer for layer in model.layers if isinstance(layer, tf.keras.layers.MultiHeadAttention)]
+
+    if len(attention_layers) == 0:
+        raise ValueError("No se encontraron capas MultiHeadAttention en el modelo.")
+
+    # Crear un modelo intermedio para obtener las activaciones de la primera capa de atención
+    first_attention_layer = attention_layers[0]
+    intermediate_model = tf.keras.models.Model(
+        inputs=model.input,
+        outputs=first_attention_layer.output  # Activaciones de la capa de atención
+    )
+
+    # Obtener las activaciones de la capa de atención
+    attention_output = intermediate_model.predict(inputs)
+    
+    # La salida de la capa de atención es [batch_size, num_heads, seq_len, seq_len], promediamos por los heads y la secuencia
+    if len(attention_output.shape) == 4:
+        # Promediar sobre la dimensión de los heads
+        attention_map = np.mean(attention_output, axis=1)  # Promediar sobre los heads
+        attention_map = np.mean(attention_map, axis=2)  # Promediar sobre la secuencia
+    else:
+        attention_map = attention_output
+
+    return attention_map
+    
+def plot_attention_map(model, image):
+    # Convertir la imagen original
+    original_image = tf.keras.preprocessing.image.array_to_img(image)
+
+    # Obtener el mapa de atención
+    attention_map = get_attention_map(model, image)
+
+    # Redimensionar el mapa de atención para que coincida con el tamaño de la imagen
+    attention_map_resized = tf.image.resize(
+        tf.expand_dims(attention_map, axis=-1), 
+        (image.shape[0], image.shape[1])
+    ).numpy().squeeze()
+
+    # Graficar
+    plt.figure(figsize=(15, 5))
+    plt.subplot(1, 2, 1)
+    plt.title("Imagen Original")
+    plt.imshow(original_image)
+    plt.axis('off')
+
+    plt.subplot(1, 2, 2)
+    plt.title("Mapa de Atención")
+    plt.imshow(attention_map_resized, cmap='jet')
+    plt.colorbar()
+    plt.axis('off')
+
+    plt.tight_layout()
 
 st.title('Detección y Predicción de Enfermedades en Plantas - Solución Híbrida (Vision Transformers)')
 
@@ -77,6 +153,17 @@ if uploaded_file is not None:
         })
 
         st.write(f"Predicción del nivel de extensión de la enfermedad (usando Vision Transformers): {predictions[0][0]:.2f}")
+        
+        st.write("Mapa de atención en análisis de imagen:")
+        
+        # Mostrar el mapa de atención
+        # Visualizar el mapa de atención
+        img = tf.keras.preprocessing.image.img_to_array(image)
+        
+        plot_attention_map(vit_model, img)
+        
+        # Mostrar el gráfico en Streamlit
+        st.pyplot(plt)
 
     elif model_choice == 'CNN + Random Forest':
         # Aplicar el ColumnTransformer para el modelo Random Forest
@@ -98,6 +185,8 @@ if uploaded_file is not None:
         # Predicción usando Random Forest
         predictions_rf = rf_model.predict(combined_features_rf)
         st.write(f"Predicción del nivel de extensión de la enfermedad (usando CNN + Random Forest): {predictions_rf[0]:.2f}")
+        
+        st.write("Importancia de las características:")
         
         # Obtener la importancia de cada característica
         importances = rf_model.feature_importances_
